@@ -33,23 +33,22 @@ dat_sat <- dat_all %>%
   select(
     all_of(key_cols),
     dissolved_oxygen_percent_saturation,
-    qc_flag_dissolved_oxygen_percent_saturation
+    rolling_sd_flag_dissolved_oxygen_percent_saturation
   )
 
 saveRDS(dat_sat, here("data/dissolved_oxygen_percent_saturation.rds"))
 
-
 # dissolved oxygen (mg/L) -------------------------------------------------
 
 dat_mgL <- dat_all %>%
-  filter(!is.na(dissolved_oxygen_mg_per_l)) %>%
+  filter(!is.na(dissolved_oxygen_uncorrected_mg_per_l)) %>%
   select(
     all_of(key_cols),
-    dissolved_oxygen_mg_per_l,
-    qc_flag_dissolved_oxygen_mg_per_l
+    dissolved_oxygen_uncorrected_mg_per_l,
+    rolling_sd_flag_dissolved_oxygen_uncorrected_mg_per_l
   )
 
-saveRDS(dat_mgL, here("data/dissolved_oxygen_mg_per_l.rds"))
+saveRDS(dat_mgL, here("data/dissolved_oxygen_uncorrected_mg_per_l.rds"))
 
 
 # temperature -------------------------------------------------------------
@@ -62,5 +61,5 @@ temp <- dat_all %>%
     qc_flag_temperature_degree_c
   )
 
-saveRDS(dat_mgL, here("data/temperature_degree_c.rds"))
+saveRDS(temp, here("data/temperature_degree_c.rds"))
 
