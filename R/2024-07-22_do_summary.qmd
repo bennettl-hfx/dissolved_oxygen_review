@@ -1,0 +1,496 @@
+---
+title: "Dissolved Oxygen Analysis Summary"
+author: "LB"
+date: "2024-07-22"
+execute: 
+  echo: false
+format: html
+editor: visual
+---
+
+```{r}
+#| warning: false
+library(dplyr)
+library(here)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
+
+dat_sat <- readRDS(here("data/dissolved_oxygen_percent_saturation.rds"))
+dat_mgl <- readRDS(here("data/dissolved_oxygen_uncorrected_mg_per_l.rds"))
+temp <- readRDS(here("data/temperature_degree_c.rds"))
+deployment_list <- readRDS(here("data/deployment_list.rds"))
+county_list <- unique(dat_sat$county)
+```
+
+## Description
+
+Biofouling, the accumulation of organic material on underwater moorings and equipment, can have a severe affect on the quality of dissolved oxygen data. Organisms undergoing photosynthesis result in unavoidable noise on dissolved oxygen data sets. The following analysis was performed to determine when biofouling is more likely to occur and what locations (if any) are more susceptible to fouling.
+
+CMAR's qc rolling standard deviation flag was used for this analysis to indicate data points taken while biofouling is present.
+
+## Frequency of Suspect Flags
+
+### Dissolved Oxygen Percent Saturation Data
+
+The figures below indicate the total number of suspect flags in each county broken down by month of observation. 
+
+Only three counties are included for illustrative purposes.
+
+```{r}
+#| echo: false
+
+get_suspect_occurrence_by_county_sat <- function(x){
+  d <- dat_sat %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & rolling_sd_flag_dissolved_oxygen_percent_saturation=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>% #label=TRUE
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n) 
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+get_suspect_occurrence_by_county_sat("Antigonish")
+get_suspect_occurrence_by_county_sat("Halifax")
+get_suspect_occurrence_by_county_sat("Queens")
+
+#lapply(county_list, get_suspect_occurrence_by_county_sat)
+
+```
+
+### Dissolved Oxygen Uncorrected mg/l Data
+
+Next, we have the same figures as above, now using dissolved oxygen uncorrected mg/L data. Note that there is only data for Halifax and Lunenburg counties.
+
+```{r}
+get_suspect_occurrence_by_county_mgl <- function(x){
+  d <- dat_mgl %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & rolling_sd_flag_dissolved_oxygen_uncorrected_mg_per_l=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n) 
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+get_suspect_occurrence_by_county_mgl("Halifax")
+get_suspect_occurrence_by_county_mgl("Lunenburg")
+
+```
+
+### Temperature
+
+Finally, we have the same plots as above, now with temperature data. Again, only a few plots are included for conciseness.
+
+```{r}
+get_suspect_occurrence_by_county_temp <- function(x){
+  d <- temp %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & qc_flag_temperature_degree_c=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n)
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+get_suspect_occurrence_by_county_sat("Antigonish")
+get_suspect_occurrence_by_county_sat("Halifax")
+get_suspect_occurrence_by_county_sat("Queens")
+
+#lapply(county_list, get_suspect_occurrence_by_county_temp)
+
+```
+
+The plots above helped guide further analysis, and confirmed the authors hypothesis: biofouling is much more likely to occur to during summer months. 
+
+
+### Filtering By A Single Station
+
+Below we can see all observations for the station Rook Island 1, sorted by month, and colored by the corresponding flag given to that observation.
+
+A proportional stacked chart allows for a better visualization of the underlying behaviour of the QC flags.
+
+(DO %sat)
+
+```{r}
+
+d <- dat_sat %>%
+  select(county:depl_end, timestamp_utc:last_col()) %>%
+  filter(deployment_id=="161") %>%   #Rook Island 1: 2022-2023
+  mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+  group_by(rolling_sd_flag_dissolved_oxygen_percent_saturation, obs_month) %>%
+  count() %>%
+  rename(num_observations=n, flag=rolling_sd_flag_dissolved_oxygen_percent_saturation) #%>%
+
+ggplot(d, aes(x=obs_month, y=num_observations, fill=flag)) +
+  geom_bar(position=position_fill(reverse=F), stat="identity") +
+  ylab("Proportion of Observations") +
+  xlab("Month of Observation") +
+  ggtitle("Rook Island 1, Deployment: 2022-07-27")
+
+```
+
+## Updated 'by month' figures
+
+To get a better idea of the true behaviour of the frequency of suspect flags, the below proportional stacked bar charts were created. Again, we come to the same conclusion, biofouling occurs during summer months significantly more than during other points of the year. 
+
+Only %sat data used for these figures, and all counties are included for clarity.
+
+```{r}
+get_suspect_occurrence_by_county_updated_sat <- function(x){
+  d <- dat_sat %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x) %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(rolling_sd_flag_dissolved_oxygen_percent_saturation, obs_month) %>%
+    count() %>%
+    rename(num_observations=n, flag=rolling_sd_flag_dissolved_oxygen_percent_saturation)
+  
+  ggplot(d, aes(x=obs_month, y=num_observations, fill=flag)) +
+    geom_bar(position=position_fill(reverse=F), stat="identity") +
+    ylab("Fraction of Total Observations") +
+    xlab("Month") +
+    ggtitle(x)
+}
+
+lapply(county_list, get_suspect_occurrence_by_county_updated_sat)
+
+```
+
+### What's going on in Antigonish?
+
+The old plot tells a seemingly similar story as the other ones, but the stacked chart tells a completely different one.
+
+As a clear outlier, Antigonish presents the opportunity for further analysis, which is included later in this document.
+
+```{r}
+get_suspect_occurrence_by_county_sat("Antigonish")
+get_suspect_occurrence_by_county_updated_sat("Antigonish")
+
+```
+
+```{r}
+percent_good_data=matrix(rep(NA,(3*398)),ncol=3)
+percent_good_data=data.frame(percent_good_data)
+
+names(percent_good_data)[1] <- "deployment_id"
+names(percent_good_data)[2] <- "good_data_%"
+names(percent_good_data)[3] <- "under_5_days_since_depl_start"
+```
+
+### Finding what percentage of data is 'good'
+
+For the purposes of this analysis, all data occurring in a deployment before the first suspect flag will be classified as 'good'. The percentage of good data was then calculated for all deployments (i.e. number of observations before first flag divided by total number of observations)
+
+Below, two histograms show the frequency of percentages of good data across all deployments. The first plot shows all percentages and their frequency, while the second plot shows the same values without those deployments in which the first suspect flag occurs within the first five days of the deployment.
+
+Simple summary statistics are listed below the graphs.
+
+```{r}
+
+for(i in 1:398){
+  percent_good_data[i,1]=i
+
+  if(i != 136 & i != 210 & i != 211 & i != 281 & i != 299){ #These deployment_id's only have flag #2
+    if(i %in% unique(dat_sat$deployment_id)){
+      depl <- dat_sat %>%
+        filter(deployment_id==i)
+
+      depl_first_flag <- depl %>%
+        filter(rolling_sd_flag_dissolved_oxygen_percent_saturation=="3")
+
+      depl_first_flag <- depl_first_flag$timestamp_utc[1]
+
+      good_data <- as.numeric(dat_sat %>%
+                                filter(deployment_id==i & timestamp_utc < depl_first_flag) %>%
+                                count())
+
+      bad_data <- as.numeric(dat_sat %>%
+                               filter(deployment_id==i & timestamp_utc >= depl_first_flag) %>%
+                               count())
+
+      percent_good_data[i,2]=round((good_data/(good_data+bad_data)), digits=4)
+
+      if(as.numeric(difftime(depl_first_flag, depl$timestamp_utc[1], units="days")) < 5){
+        percent_good_data[i,3] = "Y"
+      }
+
+    }
+
+  }
+
+}
+```
+
+
+
+```{r}
+good_data_percentages <- na.omit(percent_good_data$`good_data_%`)
+
+hist(good_data_percentages, ylim=c(0,130))
+
+x <- percent_good_data %>%
+  filter(is.na(under_5_days_since_depl_start))
+
+good_data_percentages_over_five <- na.omit(x$`good_data_%`)
+
+hist(good_data_percentages_over_five, ylim=c(0,130))
+
+```
+
+Mean and Median of all good data percentages
+
+```{r}
+
+mean(good_data_percentages)
+median(good_data_percentages)
+
+```
+
+Mean and Median of good data percentages with observations whose first flag occurs within the first 5 days of deployment removed
+
+```{r}
+
+mean(good_data_percentages_over_five)
+median(good_data_percentages_over_five)
+
+```
+
+## Scatter plots of all good data percentages vs. deployment_id
+
+Next, to determine if there is some correlation between the percentage of good data and location, we plot the percent of good data against deployment ID.
+
+Notice the clump of low percentages on the bottom left hand side of the plot.
+
+```{r}
+plot(good_data_percentages, xlab="Deployment ID", ylab="Percent of Good Data")
+
+```
+
+Now, the same figure as above, but coloured by county.
+
+```{r}
+percent_good_data_updated <- inner_join(percent_good_data, deployment_list, join_by(deployment_id))
+
+y <- percent_good_data_updated %>%
+  filter(!is.na(`good_data_%`))
+
+ggplot(y, aes(x=deployment_id, y=`good_data_%`, fill=county)) +
+  geom_point(aes(color=county))
+
+z <- percent_good_data_updated %>% #Figure immediately before, zoomed in on the first four counties
+  filter(!is.na(`good_data_%`) & county <= "Digby")
+
+ggplot(z, aes(x=deployment_id, y=`good_data_%`, fill=county)) +
+  geom_point(aes(color=county))
+```
+
+## Antigonish: Further Investigation
+
+Below are all of the deployments from Antigonish with %sat data. All but one of these deployments have nearly all of their points flagged (hence the behaviour seen just above).
+
+```{r}
+deployment_plot <- function(x){
+  d <- dat_sat %>%
+    select(county:depl_end, timestamp_utc:last_col()) %>%
+    filter(deployment_id==x) %>%   
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(rolling_sd_flag_dissolved_oxygen_percent_saturation, obs_month) %>%
+    count() %>%
+    rename(percent_observations=n, flag=rolling_sd_flag_dissolved_oxygen_percent_saturation)
+  
+  ggplot(d, aes(x=obs_month, y=percent_observations, fill=flag)) +
+    geom_bar(position=position_fill(reverse=F), stat="identity") +
+    ggtitle(paste(deployment_list[x,3], deployment_list$depl_start[x], sep=", Deployed: "))
+}
+
+antigonish_deployment_list <- c(11,20,21,22,23,24,26,27,28,29,30,33)
+
+lapply(antigonish_deployment_list, deployment_plot)
+
+```
+
+Below are three deployment plots picked randomly to illustrate the typical behaviour.
+
+```{r}
+#Three deployments picked at random
+deployment_plot(318)
+deployment_plot(104)
+deployment_plot(162)
+```
+
+## Average Number of Days Before First Suspect Flag
+
+Below are three plots, one for each data type, that show the average number of days before the first suspect flag for all deployments. This shows the average amount of time the data is 'good' broken down by month of deployment.  
+
+Note: The bar label is not the average number of days, but rather the number of deployments beginning in the indicated month. This number is included to provide a rough indication of the weight of each month.
+
+
+```{r}
+#| warning: false
+
+mean_days_by_month_2 <- rep(NA, 12)
+n_depl_by_month <- rep(NA, 12)
+n_depl_by_month_with_observations <- rep(NA,12)
+
+for(j in 1:12){
+  curr_month_deployments <- deployment_list %>%
+    filter(month(depl_start)==j)
+
+  temporary_data <- dat_sat %>%
+    filter(month(depl_start)==j)
+
+  n_depl_by_month_with_observations[j] = length(unique(temporary_data$deployment_id))
+
+  days_before_first_flag <- rep(NA, length(curr_month_deployments$deployment_id))
+
+  n_depl_by_month[j] <- length(curr_month_deployments$deployment_id)
+
+  for(i in 1:length(curr_month_deployments$deployment_id)){
+    data <- dat_sat %>%
+      filter(deployment_id == curr_month_deployments$deployment_id[i] & rolling_sd_flag_dissolved_oxygen_percent_saturation == 3)
+
+    first_flag <- data$timestamp_utc[1]
+
+    days_before_first_flag[i] <- as.numeric(difftime(first_flag, data$depl_start[1], units="days"))
+  }
+
+  mean_days_by_month_2[j]=mean(days_before_first_flag, na.rm=T)
+}
+
+
+mean_days_by_month <- data.frame(cbind(depl_month=1:12, mean_days_by_month_2, n_depl_by_month, n_depl_by_month_with_observations))
+
+mean_days_by_month <- mean_days_by_month %>%
+  mutate(depl_month=factor(month.abb[depl_month], levels=month.abb))
+
+ggplot(mean_days_by_month, aes(x=depl_month, y=mean_days_by_month_2)) +
+  geom_bar(stat="identity", fill="#49A2DE") +
+  geom_text(aes(label=n_depl_by_month_with_observations), vjust=-0.3) +
+  ggtitle("Average Number Of Days Before First Suspect Flag (%sat)") +
+  xlab("Month of Deployment") +
+  ylab("Mean Number Of Days")
+
+```
+
+
+```{r}
+#| warning: false
+
+mean_days_by_month_2 <- rep(NA, 12)
+n_depl_by_month <- rep(NA, 12)
+n_depl_by_month_with_observations <- rep(NA,12)
+
+for(j in 1:12){
+  curr_month_deployments <- deployment_list %>%
+    filter(month(depl_start)==j)
+
+  temporary_data <- dat_mgl %>%
+    filter(month(depl_start)==j)
+
+  n_depl_by_month_with_observations[j] = length(unique(temporary_data$deployment_id))
+
+  days_before_first_flag <- rep(NA, length(curr_month_deployments$deployment_id))
+
+  n_depl_by_month[j] <- length(curr_month_deployments$deployment_id)
+
+  for(i in 1:length(curr_month_deployments$deployment_id)){
+    data <- dat_mgl %>%
+      filter(deployment_id == curr_month_deployments$deployment_id[i] & rolling_sd_flag_dissolved_oxygen_uncorrected_mg_per_l == 3)
+
+    first_flag <- data$timestamp_utc[1]
+
+    days_before_first_flag[i] <- as.numeric(difftime(first_flag, data$depl_start[1], units="days"))
+  }
+
+  mean_days_by_month_2[j]=mean(days_before_first_flag, na.rm=T)
+}
+
+
+mean_days_by_month <- data.frame(cbind(depl_month=1:12, mean_days_by_month_2, n_depl_by_month, n_depl_by_month_with_observations))
+
+mean_days_by_month <- mean_days_by_month %>%
+  mutate(depl_month=factor(month.abb[depl_month], levels=month.abb))
+
+ggplot(mean_days_by_month, aes(x=depl_month, y=mean_days_by_month_2)) +
+  geom_bar(stat="identity", fill="#49A2DE") +
+  geom_text(aes(label=n_depl_by_month_with_observations), vjust=-0.3) +
+  ggtitle("Average Number Of Days Before First Suspect Flag (mg/L)") +
+  xlab("Month of Deployment") +
+  ylab("Mean Number Of Days")
+
+```
+
+
+
+```{r}
+#| warning: false
+
+mean_days_by_month_2 <- rep(NA, 12)
+n_depl_by_month <- rep(NA, 12)
+n_depl_by_month_with_observations <- rep(NA,12)
+
+for(j in 1:12){
+  curr_month_deployments <- deployment_list %>%
+    filter(month(depl_start)==j)
+
+  temporary_data <- temp %>%
+    filter(month(depl_start)==j)
+
+  n_depl_by_month_with_observations[j] = length(unique(temporary_data$deployment_id))
+
+  days_before_first_flag <- rep(NA, length(curr_month_deployments$deployment_id))
+
+  n_depl_by_month[j] <- length(curr_month_deployments$deployment_id)
+
+  for(i in 1:length(curr_month_deployments$deployment_id)){
+    data <- temp %>%
+      filter(deployment_id == curr_month_deployments$deployment_id[i] & qc_flag_temperature_degree_c == 3)
+
+    first_flag <- data$timestamp_utc[1]
+
+    days_before_first_flag[i] <- as.numeric(difftime(first_flag, data$depl_start[1], units="days"))
+  }
+
+  mean_days_by_month_2[j]=mean(days_before_first_flag, na.rm=T)
+}
+
+mean_days_by_month <- data.frame(cbind(depl_month=1:12, mean_days_by_month_2, n_depl_by_month, n_depl_by_month_with_observations))
+
+mean_days_by_month <- mean_days_by_month %>%
+  mutate(depl_month=factor(month.abb[depl_month], levels=month.abb))
+
+ggplot(mean_days_by_month, aes(x=depl_month, y=mean_days_by_month_2)) +
+  geom_bar(stat="identity", fill="#49A2DE") +
+  geom_text(aes(label=n_depl_by_month_with_observations), vjust=-0.3) +
+  ggtitle("Average Number Of Days Before First Suspect Flag (Temp)") +
+  xlab("Month of Deployment") +
+  ylab("Mean Number Of Days")
+
+```
+
+## Conclusions
+
+While this analysis primarily consists of exploratory plots, there appears to be overwhelming evidence to suggest that biofouling significantly affects dissolved oxygen data quality during the summer months (May - August). Therefore, this analysis would suggest that deploying during these months should be avoided. 
+
+However, it should be recognized that these months are realistically the best time of year to deploy. With the backing of this analysis, it is recommended that deployment dates are moved earlier towards the spring or later in the fall, as weather permits. 
+
+

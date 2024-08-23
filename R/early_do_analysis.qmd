@@ -1,0 +1,149 @@
+---
+title: "Preliminary DO Analysis"
+author: "LB"
+date: "2024-06-14"
+execute: 
+  echo: false
+format: html
+editor: visual
+---
+
+
+```{r}
+#| warning: false
+library(dplyr)
+library(here)
+library(ggplot2)
+library(lubridate)
+
+```
+
+## Frequency of Suspect Flags
+### Dissolved Oxygen Percent Saturation
+
+Each bar represents the count of suspect/of interest flags for the designated month
+
+```{r}
+#| echo: false
+
+dat_sat <- readRDS(here("data/dissolved_oxygen_percent_saturation.rds"))
+county_list <- sort(unique(dat_sat$county))
+
+get_suspect_occurrence_by_county_sat <- function(x){
+  d <- dat_sat %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & rolling_sd_flag_dissolved_oxygen_percent_saturation=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>% #label=TRUE
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n) 
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+lapply(county_list, get_suspect_occurrence_by_county_sat)
+
+```
+
+### Dissolved Oxygen Uncorrected mg/l
+
+Note: No data except in Lunenburg and Halifax counties
+
+```{r}
+dat_mgl <- readRDS(here("data/dissolved_oxygen_uncorrected_mg_per_l.rds"))
+
+get_suspect_occurrence_by_county_mgl <- function(x){
+  d <- dat_mgl %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & rolling_sd_flag_dissolved_oxygen_uncorrected_mg_per_l=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n) 
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+get_suspect_occurrence_by_county_mgl("Halifax")
+get_suspect_occurrence_by_county_mgl("Lunenburg")
+
+```
+
+### Temperature
+
+```{r}
+
+temp <- readRDS(here("data/temperature_degree_c.rds"))
+
+get_suspect_occurrence_by_county_temp <- function(x){
+  d <- temp %>%
+    select(county:station, timestamp_utc:last_col()) %>%
+    filter(county==x & qc_flag_temperature_degree_c=="3") %>%
+    mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+    group_by(obs_month) %>%
+    count() %>%
+    rename(num_observations=n)
+  
+  p <- ggplot(d, aes(x=obs_month, y=num_observations, fill=obs_month)) +
+    geom_bar(stat="identity", fill="#2da8eb") +
+    ggtitle(x)
+  
+  return(p)
+}
+
+lapply(county_list, get_suspect_occurrence_by_county_temp)
+
+```
+
+
+### Filtering By A Single Station
+
+Below we can see all observations for the station Rook Island 1, sorted by month, and colored by the corresponding flag given to that observation.
+
+(DO %sat)
+
+```{r}
+
+d <- dat_sat_new %>%
+  select(county:depl_end, timestamp_utc:last_col()) %>%
+  filter(deployment_id=="161") %>%   #Rook Island 1: 2022-2023
+  mutate(obs_month = month(timestamp_utc, label=T, abbr=T)) %>%
+  group_by(rolling_sd_flag_dissolved_oxygen_percent_saturation, obs_month) %>%
+  count() %>%
+  rename(num_observations=n, flag=rolling_sd_flag_dissolved_oxygen_percent_saturation) #%>%
+
+ggplot(d, aes(x=obs_month, y=num_observations, fill=flag)) +
+  geom_bar(position=position_fill(reverse=TRUE), stat="identity")
+
+```
+
+Owls Head, Halifax - Comparing temperature and DO %sat
+
+```{r}
+# Note: This code was written before the deployment id column was added
+
+data <- temp %>%
+  filter(county=="Halifax", station=="Owls Head", timestamp_utc < "2018-12-31 00:00:00",
+         timestamp_utc > "2018-03-01 00:00:00")
+
+ggplot(data, aes(x=timestamp_utc, y=temperature_degree_c)) + 
+  geom_line() +
+  ggtitle("Temperature")
+
+data2 <- dat_sat %>%
+  filter(county=="Halifax", station=="Owls Head", timestamp_utc < "2018-12-31 00:00:00",
+         timestamp_utc > "2018-03-01 00:00:00")
+
+ggplot(data2, aes(x=timestamp_utc, y=dissolved_oxygen_percent_saturation)) + 
+  geom_line() + 
+  ggtitle("DO %sat")
+```
+
